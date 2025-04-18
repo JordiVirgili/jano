@@ -3,10 +3,12 @@ from fastapi import Depends, FastAPI, HTTPException, status
 from fastapi.security import HTTPBasic, HTTPBasicCredentials
 from typing import Optional
 import secrets
+from dotenv import load_dotenv
 
 # Get credentials from environment variables
-API_USERNAME = os.getenv("JANO_API_USERNAME", "admin")
-API_PASSWORD = os.getenv("JANO_API_PASSWORD", "admin")
+load_dotenv()
+API_USERNAME = os.getenv("JANO_API_USERNAME")
+API_PASSWORD = os.getenv("JANO_API_PASSWORD")
 
 security = HTTPBasic()
 

@@ -2,6 +2,9 @@ import os
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from dotenv import load_dotenv
+
+load_dotenv()
 
 # Get database configuration from environment variables
 DB_TYPE = os.getenv("JANO_DB_TYPE", "sqlite").lower()
