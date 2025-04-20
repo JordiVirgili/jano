@@ -92,9 +92,15 @@ class ChatQuery(BaseModel):
     session_id: Optional[str] = None
 
 
+class EnhancedChatQuery(ChatQuery):
+    """Enhanced chat query with option to force advanced model."""
+    force_advanced: bool = False
+
+
 class ChatResponse(BaseModel):
     response: str
     session_id: str
+    model_used: Optional[str] = "Unknown"
 
 
 class TaskWithProcesses(TaskInDB):
