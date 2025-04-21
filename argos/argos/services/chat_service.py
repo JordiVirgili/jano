@@ -28,17 +28,8 @@ class ChatService:
         llm_type = os.getenv("LLM_TYPE", "claudeplugin").lower()
 
         try:
-            # Create plugin configuration from environment variables
+            # Create plugin configuration from custom variables
             config = {}
-
-            # Common configuration options
-            if llm_type == "claudeplugin":
-                config = {"api_key": os.getenv("ANTHROPIC_API_KEY"),
-                    "default_model": os.getenv("ANTHROPIC_DEFAULT_MODEL", "claude-3-5-sonnet-20240620"),
-                    "advanced_model": os.getenv("ANTHROPIC_ADVANCED_MODEL", "claude-3-7-sonnet-20240229")}
-            elif llm_type == "openai":
-                config = {"api_key": os.getenv("OPENAI_API_KEY"), "model": os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")}
-            # Add other LLM-specific configurations as needed
 
             # Get the plugin instance
             plugin = self.plugin_manager.get_plugin(llm_type, config)

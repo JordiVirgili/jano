@@ -90,8 +90,7 @@ class PluginManager:
             plugin_instance = self.plugin_classes[plugin_name]()
 
             # Initialize the plugin if configuration is provided
-            if config:
-                plugin_instance.initialize(config)
+            plugin_instance.initialize(config)
 
             # Cache the instance
             self.loaded_plugins[plugin_name] = plugin_instance
