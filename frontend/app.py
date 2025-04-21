@@ -271,15 +271,27 @@ def display_message(message):
 
                         # Add the command and its result to the chat
                         st.session_state.messages.append({"role": "user", "content": f"Executed command: {cmd}",
-                            "timestamp": datetime.now().isoformat()})
+                                                          "timestamp": datetime.now().isoformat()})
 
-                        st.session_state.messages.append(
-                            {"role": "assistant", "content": f"Command result:\n```\n{result}\n```",
-                                "timestamp": datetime.now().isoformat()})
+                        # Add temporary result message
+                        temp_result_message = {"role": "assistant", "content": f"Command result:\n```\n{result}\n```",
+                                               "timestamp": datetime.now().isoformat(), "commands": []}
+                        st.session_state.messages.append(temp_result_message)
 
-                        # Send the result to the API to maintain context
+                        # Send the result to the API to maintain context and get LLM response
                         if st.session_state.current_session_id:
-                            send_message(f"Command executed: {cmd}\nResult: {result}", st.session_state.current_session_id)
+                            response = send_message(f"Command executed: {cmd}\nResult: {result}",
+                                                    st.session_state.current_session_id)
+
+                            # If we got a valid response from the API, replace the temporary message
+                            if response and "message" in response:
+                                # Remove the temporary message
+                                st.session_state.messages.pop()
+
+                                # Add the actual response from the LLM
+                                assistant_message = {"role": "assistant", "content": response["message"],
+                                    "commands": response.get("commands", []), "timestamp": datetime.now().isoformat()}
+                                st.session_state.messages.append(assistant_message)
 
                         st.rerun()
 
