@@ -265,11 +265,9 @@ def display_message(message):
                     col_index = i % len(cols)
                     if cols[col_index].button(cmd, key=f"cmd_{cmd}_{i}"):
                         # Execute command
-                        actual_cmd = cmd[1:]  # Remove the leading slash
-
                         # Show a spinner while executing
                         with st.spinner(f"Executing {cmd}..."):
-                            result = run_command(actual_cmd)
+                            result = run_command(cmd)
 
                         # Add the command and its result to the chat
                         st.session_state.messages.append({"role": "user", "content": f"Executed command: {cmd}",
