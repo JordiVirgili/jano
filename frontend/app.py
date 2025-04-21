@@ -139,23 +139,6 @@ def run_command(command: str) -> str:
         return f"Error executing command: {e.stderr}"
 
 
-def extract_commands(text: str) -> List[str]:
-    """Extract commands from text using a regex pattern for /command format."""
-    # Pattern to match commands like /scan, /attack etc.
-    pattern = r'/([a-zA-Z_]+)(?:\s+([^\n]+))?'
-    matches = re.findall(pattern, text)
-    commands = []
-
-    for match in matches:
-        cmd, args = match
-        if args:
-            commands.append(f"/{cmd} {args}")
-        else:
-            commands.append(f"/{cmd}")
-
-    return commands
-
-
 def clean_command(cmd: str) -> str:
     """Clean command string from API response format."""
     # Remove language identifier if present (like 'bash\n')
@@ -182,9 +165,6 @@ def initialize_session_state():
     if "messages" not in st.session_state:
         st.session_state.messages = []
 
-    if "commands" not in st.session_state:
-        st.session_state.commands = []
-
 
 def refresh_sessions():
     """Refresh the list of available chat sessions."""
@@ -209,7 +189,7 @@ def format_timestamp(timestamp_str: str) -> str:
     """Format ISO timestamp string to a user-friendly format."""
     try:
         dt = datetime.fromisoformat(timestamp_str.replace('Z', '+00:00'))
-        return dt.strftime("%H:%M:%S")
+        return dt.strftime("%d/%m/%y %H:%M")
     except:
         return ""
 
@@ -277,32 +257,33 @@ def display_message(message):
 
     # Extract and display command buttons for assistant messages
     if message["role"] == "assistant":
-        commands = extract_commands(message["content"])
-        if commands:
-            cols = st.columns(min(len(commands), 4))
-            for i, cmd in enumerate(commands):
-                col_index = i % len(cols)
-                if cols[col_index].button(cmd, key=f"cmd_{cmd}_{i}"):
-                    # Execute command
-                    actual_cmd = cmd[1:]  # Remove the leading slash
+        if "commands" in message.keys():
+            commands = message["commands"]
+            if commands:
+                cols = st.columns(min(len(commands), 4))
+                for i, cmd in enumerate(commands):
+                    col_index = i % len(cols)
+                    if cols[col_index].button(cmd, key=f"cmd_{cmd}_{i}"):
+                        # Execute command
+                        actual_cmd = cmd[1:]  # Remove the leading slash
 
-                    # Show a spinner while executing
-                    with st.spinner(f"Executing {cmd}..."):
-                        result = run_command(actual_cmd)
+                        # Show a spinner while executing
+                        with st.spinner(f"Executing {cmd}..."):
+                            result = run_command(actual_cmd)
 
-                    # Add the command and its result to the chat
-                    st.session_state.messages.append({"role": "user", "content": f"Executed command: {cmd}",
-                        "timestamp": datetime.now().isoformat()})
-
-                    st.session_state.messages.append(
-                        {"role": "assistant", "content": f"Command result:\n```\n{result}\n```",
+                        # Add the command and its result to the chat
+                        st.session_state.messages.append({"role": "user", "content": f"Executed command: {cmd}",
                             "timestamp": datetime.now().isoformat()})
 
-                    # Send the result to the API to maintain context
-                    if st.session_state.current_session_id:
-                        send_message(f"Command executed: {cmd}\nResult: {result}", st.session_state.current_session_id)
+                        st.session_state.messages.append(
+                            {"role": "assistant", "content": f"Command result:\n```\n{result}\n```",
+                                "timestamp": datetime.now().isoformat()})
 
-                    st.rerun()
+                        # Send the result to the API to maintain context
+                        if st.session_state.current_session_id:
+                            send_message(f"Command executed: {cmd}\nResult: {result}", st.session_state.current_session_id)
+
+                        st.rerun()
 
 
 def main():
@@ -363,12 +344,11 @@ def main():
 
             if response:
                 # Add response to display
-                assistant_message = {"role": "assistant", "content": response["message"],
-                    "timestamp": datetime.now().isoformat()}
+                assistant_message = {"role": "assistant",
+                                     "content": response["message"],
+                                     "commands": response["commands"],
+                                     "timestamp": datetime.now().isoformat()}
                 st.session_state.messages.append(assistant_message)
-
-                # Extract commands for easy access
-                st.session_state.commands = extract_commands(response["message"])
 
             # Rerun to update the UI with new messages
             st.rerun()

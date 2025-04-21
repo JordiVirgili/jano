@@ -1,4 +1,5 @@
 import uuid
+import re
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import JSONResponse
 from argos.database import get_db
@@ -27,31 +28,41 @@ def format_response(content: str) -> Dict[str, Any]:
     Format any response to the standardized format:
     {"message": "Text for the user response", "commands": ["command1", "command2", ...]}
 
-    If content already contains commands in some format, try to extract them.
-    Otherwise, return an empty commands list.
+    Extracts commands inside triple backtick code blocks, regardless of language.
+    Also extracts other common command formats if present.
     """
-    # Basic command extraction - look for command patterns
-    commands = []
+    commands: List[str] = []
 
-    # Extract commands that might be formatted as shell commands
-    import re
-    # Look for command patterns like `command` or shell commands with $ prefix
-    command_patterns = [r'`([\w\./\-\s]+)`',  # Commands in backticks
+    # Extract commands from triple backtick code blocks (with optional language specifier)
+    code_block_pattern = r'```(?:\w+\n)?(.*?)```'
+    code_blocks = re.findall(code_block_pattern, content, flags=re.DOTALL)
+    for block in code_blocks:
+        # Split by line and strip
+        block_commands = [line.strip() for line in block.strip().splitlines() if line.strip()]
+        commands.extend(block_commands)
+
+    # Additional command patterns (optional, for broader coverage)
+    other_patterns = [
         r'\$ ([\w\./\-\s]+)',  # Shell commands with $ prefix
         r'Run "([\w\./\-\s]+)"',  # Run "command"
-        r'run "([\w\./\-\s]+)"',  # run "command"
-        r'Execute "([\w\./\-\s]+)"',  # Execute "command"
-        r'execute "([\w\./\-\s]+)"'  # execute "command"
+        r'run "([\w\./\-\s]+)"',
+        r'Execute "([\w\./\-\s]+)"',
+        r'execute "([\w\./\-\s]+)"'
     ]
 
-    for pattern in command_patterns:
+    for pattern in other_patterns:
         matches = re.findall(pattern, content)
         commands.extend(matches)
 
-    # Remove duplicates
-    commands = list(dict.fromkeys(commands))
+    # Remove duplicates while preserving order
+    seen = set()
+    unique_commands = []
+    for cmd in commands:
+        if cmd not in seen:
+            seen.add(cmd)
+            unique_commands.append(cmd)
 
-    return {"message": content, "commands": commands}
+    return {"message": content, "commands": unique_commands}
 
 
 @router.post("/query")
@@ -86,7 +97,7 @@ def process_chat_query(query: schemas.EnhancedChatQuery, db: Session = Depends(g
 @router.get("/sessions", response_model=List[schemas.ChatSessionInDB])
 def get_chat_sessions(skip: int = 0, limit: int = 100, db: Session = Depends(get_db)):
     """Get all chat sessions."""
-    return chat_session_repo.get_all(db)[skip:skip + limit]
+    return chat_session_repo.get_all(db)[::-1][skip:skip + limit]
 
 
 @router.get("/sessions/{session_id}", response_model=schemas.ChatSessionWithMessages)
