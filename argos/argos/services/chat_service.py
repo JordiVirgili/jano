@@ -2,11 +2,10 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from datetime import datetime
 import os
-import importlib.util
-import sys
 import logging
 
 from argos.database import ChatSessionRepository, ChatMessageRepository
+from argos.core import PluginManager
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -20,27 +19,43 @@ class ChatService:
         """Initialize the chat service with repositories."""
         self.session_repo = session_repo
         self.message_repo = message_repo
+        self.plugin_manager = PluginManager()
+        self.plugin_manager.discover_plugins()
         self.llm_plugin = self._load_llm_plugin()
 
     def _load_llm_plugin(self):
         """Load the LLM plugin based on the configuration."""
-        llm_type = os.getenv("LLM_TYPE", "claude")
+        llm_type = os.getenv("LLM_TYPE", "claudeplugin").lower()
 
         try:
-            # Dynamically import the plugin module
-            if llm_type == "claude":
-                from argos.plugins import ClaudePlugin
-                plugin = ClaudePlugin()
+            # Create plugin configuration from environment variables
+            config = {}
 
-                # Initialize the plugin with configuration
-                plugin.initialize({"api_key": os.getenv("ANTHROPIC_API_KEY"),
+            # Common configuration options
+            if llm_type == "claudeplugin":
+                config = {"api_key": os.getenv("ANTHROPIC_API_KEY"),
                     "default_model": os.getenv("ANTHROPIC_DEFAULT_MODEL", "claude-3-5-sonnet-20240620"),
-                    "advanced_model": os.getenv("ANTHROPIC_ADVANCED_MODEL", "claude-3-7-sonnet-20240229")})
+                    "advanced_model": os.getenv("ANTHROPIC_ADVANCED_MODEL", "claude-3-7-sonnet-20240229")}
+            elif llm_type == "openai":
+                config = {"api_key": os.getenv("OPENAI_API_KEY"), "model": os.getenv("OPENAI_MODEL", "gpt-3.5-turbo")}
+            # Add other LLM-specific configurations as needed
 
-                return plugin
-            else:
-                logger.error(f"Unsupported LLM type: {llm_type}")
-                raise ValueError(f"Unsupported LLM type: {llm_type}")
+            # Get the plugin instance
+            plugin = self.plugin_manager.get_plugin(llm_type, config)
+
+            if not plugin:
+                available_plugins = self.plugin_manager.discover_plugins()
+                logger.error(f"Plugin '{llm_type}' not available. Available plugins: {available_plugins}")
+                # Fall back to first available plugin if requested one is not found
+                if available_plugins:
+                    fallback_plugin = available_plugins[0]
+                    logger.warning(f"Falling back to plugin '{fallback_plugin}'")
+                    plugin = self.plugin_manager.get_plugin(fallback_plugin, config)
+
+            if not plugin:
+                raise ValueError(f"No LLM plugins available")
+
+            return plugin
 
         except Exception as e:
             logger.error(f"Error loading LLM plugin: {str(e)}")
@@ -71,12 +86,12 @@ class ChatService:
 
         # Format messages for the LLM
         formatted_history = [{"role": msg.role, "content": msg.content} for msg in messages if
-            msg.role in ["system", "user", "assistant"]  # Ensure only valid roles are included
-        ]
+                             msg.role in ["system", "user", "assistant"]  # Ensure only valid roles are included
+                             ]
 
         # Generate response using the LLM plugin
         # The plugin will automatically select the appropriate model based on the message
-        response_text = self.llm_plugin.generate_response(message, formatted_history)
+        response_text = self.llm_plugin.generate_response(message, formatted_history, force_advanced)
 
         # Save the response
         self.message_repo.add_message(db, chat_session.id, "assistant", response_text)
@@ -107,7 +122,7 @@ class ChatService:
 
         # Format messages
         formatted_messages = [{"id": message.id, "role": message.role, "content": message.content,
-            "timestamp": message.timestamp.isoformat()} for message in messages]
+                               "timestamp": message.timestamp.isoformat()} for message in messages]
 
         return formatted_messages
 
