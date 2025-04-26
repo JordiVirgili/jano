@@ -261,6 +261,7 @@ def display_message(message):
     message_div = f"""
     <div style="display: flex; flex-direction: {'row-reverse' if is_user else 'row'}; margin-bottom: 10px;">
         <div style="background-color: {'#241a3d' if is_user else '#1a363d'}; 
+                    color: white;
                     padding: 10px; 
                     border-radius: 10px; 
                     max-width: 80%; 
