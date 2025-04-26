@@ -1,0 +1,10 @@
+fastapi==0.115.12
+uvicorn==0.34.1
+sqlalchemy==2.0.40
+python-dotenv==1.1.0
+starlette==0.46.2
+pydantic==2.11.3
+httpx==0.28.1
+colorama==0.4.6
+click==8.1.8
+paramiko==3.4.0
