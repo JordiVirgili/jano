@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 load_dotenv()
 
 # API configuration
-API_URL = os.getenv("JANO_API_URL", "http://localhost:8005/api/v1")  # Can be overridden in .env file
+API_URL = os.getenv("JANO_API_URL", "http://localhost:8005/api/v1")  # Argos API
+ERIS_API_URL = os.getenv("ERIS_API_URL", "http://localhost:8006/api/v1")  # Eris API
 API_USERNAME = os.getenv("JANO_API_USERNAME", "admin")
 API_PASSWORD = os.getenv("JANO_API_PASSWORD", "secure_password_here")
 
@@ -27,9 +28,10 @@ def get_auth_header():
 
 
 # Helper functions for API calls
-def api_get(endpoint: str):
+def api_get(endpoint: str, eris_api: bool = False):
     try:
-        response = requests.get(f"{API_URL}/{endpoint}", headers=get_auth_header())
+        base_url = ERIS_API_URL if eris_api else API_URL
+        response = requests.get(f"{base_url}/{endpoint}", headers=get_auth_header())
         response.raise_for_status()
         return response.json()
     except Exception as e:
@@ -37,13 +39,14 @@ def api_get(endpoint: str):
         return None
 
 
-def api_post(endpoint: str, data: Dict[str, Any]):
+def api_post(endpoint: str, data: Dict[str, Any] = None, eris_api: bool = False):
     try:
-        full_url = f"{API_URL}/{endpoint}"
+        base_url = ERIS_API_URL if eris_api else API_URL
+        full_url = f"{base_url}/{endpoint}"
         print(f"Making POST request to: {full_url}")
 
         headers = {**get_auth_header(), "Content-Type": "application/json"}
-        response = requests.post(full_url, json=data, headers=headers)
+        response = requests.post(full_url, json=data if data else {}, headers=headers)
 
         # Print response status for debugging
         print(f"Response status code: {response.status_code}")
@@ -59,7 +62,7 @@ def api_post(endpoint: str, data: Dict[str, Any]):
             return {"response": "Error: Invalid JSON response from API"}
 
     except requests.exceptions.ConnectionError as e:
-        error_msg = f"Connection error: Could not connect to API at {API_URL}. Is the server running?"
+        error_msg = f"Connection error: Could not connect to API at {full_url}. Is the server running?"
         print(error_msg)
         st.error(error_msg)
         return {"response": error_msg}
@@ -135,6 +138,62 @@ def send_message(message: str, session_id: str, force_advanced: bool = False):
         return {"response": f"Error: {str(e)}"}
 
 
+# Eris functions
+def get_eris_plugins():
+    """Get the list of available Eris attack plugins."""
+    return api_get("eris/plugins", eris_api=True)
+
+
+def format_attack_results(plugin_name: str, target: str, result: Dict[str, Any]) -> str:
+    """Format the attack results into a readable message."""
+    message = f"## Eris Security Test Results\n\n"
+    message += f"**Plugin:** {plugin_name}\n"
+    message += f"**Target:** {target}\n\n"
+
+    # Add success status if available
+    if "success" in result:
+        status = "✅ Successful" if result["success"] else "❌ Failed"
+        message += f"**Status:** {status}\n"
+
+    # Add severity if available
+    if "severity" in result:
+        severity = result["severity"].upper()
+        message += f"**Severity:** {severity}\n"
+
+    # Add main details
+    if "details" in result:
+        message += f"\n### Details\n{result['details']}\n\n"
+
+    # Add recommendations if available
+    if "recommendations" in result and result["recommendations"]:
+        message += "### Recommendations\n"
+        for i, rec in enumerate(result["recommendations"], 1):
+            message += f"{i}. {rec}\n"
+        message += "\n"
+
+    # Add extended details if available
+    if "details_extended" in result and result["details_extended"]:
+        message += "### Extended Details\n"
+
+        # Handle successful credentials
+        if "successful_credentials" in result["details_extended"]:
+            creds = result["details_extended"]["successful_credentials"]
+            message += f"**Successful Login:** Username '{creds.get('username')}' with password '{creds.get('password')}'\n\n"
+
+        # Handle attempts info
+        if "attempts" in result["details_extended"]:
+            message += f"**Total Attempts:** {result['details_extended']['attempts']}\n\n"
+
+        # Handle attempted combinations
+        if "attempted_combinations" in result["details_extended"]:
+            message += "**Attempted Combinations:**\n```\n"
+            for combo in result["details_extended"]["attempted_combinations"]:
+                message += f"Username: {combo.get('username')}, Password: {combo.get('password')}\n"
+            message += "```\n"
+
+    return message
+
+
 def run_command(command: str) -> str:
     """Execute a shell command and return its output."""
     try:
@@ -169,6 +228,14 @@ def initialize_session_state():
 
     if "messages" not in st.session_state:
         st.session_state.messages = []
+
+    # Add Eris plugins to session state
+    if "eris_plugins" not in st.session_state:
+        plugins_response = get_eris_plugins()
+        if plugins_response and "plugins" in plugins_response:
+            st.session_state.eris_plugins = plugins_response["plugins"]
+        else:
+            st.session_state.eris_plugins = []
 
 
 def refresh_sessions():
@@ -217,6 +284,66 @@ def sidebar_ui():
         if st.button("Refresh Sessions", key="refresh"):
             refresh_sessions()
 
+        # Eris Attack section (only shown when a session is active)
+        if st.session_state.current_session_id:
+            st.subheader("Eris Security Tests")
+
+            # Refresh Eris plugins
+            if st.button("Refresh Eris Plugins", key="refresh_eris"):
+                plugins_response = get_eris_plugins()
+                if plugins_response and "plugins" in plugins_response:
+                    st.session_state.eris_plugins = plugins_response["plugins"]
+                    st.success(f"Found {len(st.session_state.eris_plugins)} plugins")
+                else:
+                    st.error("Failed to load Eris plugins")
+
+            # Eris attack form
+            with st.form(key="eris_attack_form"):
+                st.markdown("### Run Security Test")
+
+                # Plugin selection
+                plugin_options = []
+                for plugin in st.session_state.eris_plugins:
+                    plugin_options.append(plugin["name"])
+
+                selected_plugin = st.selectbox("Select Plugin", options=plugin_options, key="eris_plugin")
+
+                # Target input
+                target = st.text_input("Target (hostname, IP, or service)", key="eris_target")
+
+                # Submit button
+                eris_submit = st.form_submit_button("Run Test")
+
+                if eris_submit and selected_plugin and target:
+                    if st.session_state.current_session_id:
+                        with st.spinner(f"Running {selected_plugin} attack on {target}..."):
+                            # Call the Eris attack endpoint
+                            attack_result = api_post(f"eris/attack/{selected_plugin}?target={target}",
+                                                     eris_api=True)
+
+                            if attack_result and "result" in attack_result:
+                                # Format the attack results
+                                formatted_results = format_attack_results(selected_plugin, target,
+                                                                          attack_result["result"])
+
+                                # Add a user message showing the attack request
+                                user_message = {"role": "user",
+                                                "content": f"Run Eris security test: {selected_plugin} on {target}",
+                                                "timestamp": datetime.now().isoformat()}
+                                st.session_state.messages.append(user_message)
+
+                                # Send to conversation to maintain context in the LLM
+                                send_message(formatted_results, st.session_state.current_session_id,
+                                             force_advanced=True)
+
+                                # Refresh the conversation
+                                load_session(st.session_state.current_session_id)
+                                st.rerun()
+                            else:
+                                st.error(f"Failed to run attack: {attack_result}")
+                    else:
+                        st.error("Please start or select a chat session first")
+
         # Display available sessions
         st.subheader("Available Sessions")
 
@@ -239,6 +366,8 @@ def sidebar_ui():
                                 st.session_state.messages = []
                             refresh_sessions()
                             st.rerun()
+
+
 
 
 def display_message(message):
@@ -308,7 +437,7 @@ def display_message(message):
                                 # Send the result to the API to maintain context
                                 if st.session_state.current_session_id:
                                     send_message(f"Command: {cmd_clean}\nResult:\n {result}",
-                                        st.session_state.current_session_id)
+                                                 st.session_state.current_session_id)
 
                                 # Use standard rerun method in current Streamlit versions
                                 st.rerun()
@@ -337,8 +466,7 @@ def display_message(message):
                                 cmd_clean = clean_command(cmd)
                                 # Create a unique key using the message ID and command index
                                 unique_key = f"detected_{message_id}_{i}"
-                                if st.button(f"🖥️ {cmd_clean}", key=unique_key,
-                                             help="Click to execute command"):
+                                if st.button(f"🖥️ {cmd_clean}", key=unique_key, help="Click to execute command"):
                                     with st.spinner(f"Executing: {cmd_clean}..."):
                                         result = run_command(cmd_clean)
 
@@ -351,7 +479,7 @@ def display_message(message):
 
                                     if st.session_state.current_session_id:
                                         send_message(f"Command: {cmd_clean}\nResult: {result}",
-                                            st.session_state.current_session_id)
+                                                     st.session_state.current_session_id)
 
                                     # Use standard rerun method in current Streamlit versions
                                     st.rerun()
@@ -380,18 +508,17 @@ def display_message(message):
                                 cmd_clean = clean_command(cmd)
                                 # Create a unique key using the message ID and command index
                                 unique_key = f"detected_{message_id}_{i}"
-                                if st.button(f"🖥️ {cmd_clean}", key=unique_key,
-                                             help="Click to execute command"):
+                                if st.button(f"🖥️ {cmd_clean}", key=unique_key, help="Click to execute command"):
                                     with st.spinner(f"Executing: {cmd_clean}..."):
                                         result = run_command(cmd_clean)
 
                                     st.session_state.messages.append(
                                         {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
-                                            "timestamp": datetime.now().isoformat()})
+                                         "timestamp": datetime.now().isoformat()})
 
                                     if st.session_state.current_session_id:
                                         send_message(f"Comand: {cmd_clean}\nResult: {result}",
-                                            st.session_state.current_session_id)
+                                                     st.session_state.current_session_id)
 
                                     st.rerun()
 
@@ -451,7 +578,6 @@ def main():
             # Send to API
             with st.spinner("Thinking..."):
                 response = send_message(user_input, st.session_state.current_session_id, use_advanced)
-
 
             # Rerun to update the UI with new messages
             st.rerun()
