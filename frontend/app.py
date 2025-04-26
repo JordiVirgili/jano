@@ -431,12 +431,12 @@ def display_message(message):
                                 safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
 
                                 st.session_state.messages.append(
-                                    {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
+                                    {"role": "user", "content": f"Command: {cmd_clean}\nResult: {safe_result}",
                                      "timestamp": datetime.now().isoformat()})
 
                                 # Send the result to the API to maintain context
                                 if st.session_state.current_session_id:
-                                    send_message(f"Command: {cmd_clean}\nResult:\n {result}",
+                                    send_message(f"Command: {cmd_clean}\nResult:\n {safe_result}",
                                                  st.session_state.current_session_id)
 
                                 # Use standard rerun method in current Streamlit versions
@@ -474,11 +474,11 @@ def display_message(message):
                                     safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
 
                                     st.session_state.messages.append(
-                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
+                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {safe_result}",
                                          "timestamp": datetime.now().isoformat()})
 
                                     if st.session_state.current_session_id:
-                                        send_message(f"Command: {cmd_clean}\nResult: {result}",
+                                        send_message(f"Command: {cmd_clean}\nResult: {safe_result}",
                                                      st.session_state.current_session_id)
 
                                     # Use standard rerun method in current Streamlit versions
@@ -512,12 +512,15 @@ def display_message(message):
                                     with st.spinner(f"Executing: {cmd_clean}..."):
                                         result = run_command(cmd_clean)
 
+                                    # Format the result to escape HTML
+                                    safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
+
                                     st.session_state.messages.append(
-                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
+                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {safe_result}",
                                          "timestamp": datetime.now().isoformat()})
 
                                     if st.session_state.current_session_id:
-                                        send_message(f"Comand: {cmd_clean}\nResult: {result}",
+                                        send_message(f"Comand: {cmd_clean}\nResult: {safe_result}",
                                                      st.session_state.current_session_id)
 
                                     st.rerun()
