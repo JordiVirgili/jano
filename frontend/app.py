@@ -383,9 +383,10 @@ def display_message(message):
 
     # Sanitize content to prevent raw HTML display
     content = message.get('content', '')
-    if not is_user:
-        # Escape HTML tags for display in assistant messages
-        content = content.replace("<", "&lt;").replace(">", "&gt;")
+    # if not is_user:
+    #     # Escape HTML tags for display in assistant messages
+    #     content = content.replace("<", "&lt;").replace(">", "&gt;")
+    content = content.replace("<", "&lt;").replace(">", "&gt;")
 
     message_div = f"""
     <div style="display: flex; flex-direction: {'row-reverse' if is_user else 'row'}; margin-bottom: 10px;">
