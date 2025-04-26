@@ -30,7 +30,7 @@ class OpenAIPlugin(LLMPlugin):
 
         self.last_used_model = self.model
 
-    def generate_response(self, prompt: str, context: Optional[List[Dict[str, str]]] = None) -> str:
+    def generate_response(self, prompt: str, context: Optional[List[Dict[str, str]]] = None, force_advanced: bool = False) -> str:
         """
         Generate a response using OpenAI API.
 

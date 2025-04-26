@@ -41,24 +41,40 @@ def format_response(content: str) -> Dict[str, Any]:
         block_commands = [line.strip() for line in block.strip().splitlines() if line.strip()]
         commands.extend(block_commands)
 
-    # Additional command patterns (optional, for broader coverage)
+    # Additional command patterns
     other_patterns = [
-        r'\$ ([\w\./\-\s]+)',  # Shell commands with $ prefix
-        r'Run "([\w\./\-\s]+)"',  # Run "command"
-        r'run "([\w\./\-\s]+)"',
-        r'Execute "([\w\./\-\s]+)"',
-        r'execute "([\w\./\-\s]+)"'
+        r'\$ ([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)',  # Shell commands with $ prefix
+        r'Run[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',  # Run: "command"
+        r'run[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',
+        r'Execute[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',
+        r'execute[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',
+        r'Executa[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',  # Catalan
+        r'executa[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',   # Catalan
+        r'Comando[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',  # Spanish
+        r'comando[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',   # Spanish
+        r'Comanda[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',  # Catalan
+        r'comanda[:\s]+"([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)"',   # Catalan
     ]
 
     for pattern in other_patterns:
         matches = re.findall(pattern, content)
         commands.extend(matches)
 
+    # Look for sudo commands (these are important for security configurations)
+    sudo_pattern = r'sudo\s+([\w\./\-\s\{\}\[\]\(\)\|\>\<\&\;\:\'\"\=\+]+)'
+    sudo_commands = re.findall(sudo_pattern, content)
+    # Only add sudo commands that aren't part of a larger command we already detected
+    for cmd in sudo_commands:
+        full_cmd = f"sudo {cmd}"
+        if not any(full_cmd in existing_cmd for existing_cmd in commands):
+            commands.append(full_cmd)
+
     # Remove duplicates while preserving order
     seen = set()
     unique_commands = []
     for cmd in commands:
-        if cmd not in seen:
+        cmd = cmd.strip()
+        if cmd and cmd not in seen:
             seen.add(cmd)
             unique_commands.append(cmd)
 

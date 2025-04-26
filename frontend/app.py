@@ -239,6 +239,20 @@ def sidebar_ui():
 def display_message(message):
     """Display a single message in the chat UI."""
     is_user = message["role"] == "user"
+
+    # Don't display system messages in the chat UI
+    if message["role"] == "system":
+        return
+
+    # Get message ID to use in keys
+    message_id = message.get("id", str(hash(message.get("content", ""))))
+
+    # Sanitize content to prevent raw HTML display
+    content = message.get('content', '')
+    if not is_user:
+        # Escape HTML tags for display in assistant messages
+        content = content.replace("<", "&lt;").replace(">", "&gt;")
+
     message_div = f"""
     <div style="display: flex; flex-direction: {'row-reverse' if is_user else 'row'}; margin-bottom: 10px;">
         <div style="background-color: {'#241a3d' if is_user else '#1a363d'}; 
@@ -246,7 +260,7 @@ def display_message(message):
                     border-radius: 10px; 
                     max-width: 80%; 
                     box-shadow: 0 1px 2px rgba(0,0,0,0.1);">
-            <p style="margin: 0; white-space: pre-wrap;">{message['content']}</p>
+            <p style="margin: 0; white-space: pre-wrap;">{content}</p>
             <p style="margin: 0; font-size: 0.7em; color: #888; text-align: right;">
                 {format_timestamp(message.get('timestamp', ''))}
             </p>
@@ -257,43 +271,136 @@ def display_message(message):
 
     # Extract and display command buttons for assistant messages
     if message["role"] == "assistant":
-        if "commands" in message.keys():
+        # Check if we have commands from API response
+        if isinstance(message, dict) and "commands" in message and message["commands"]:
             commands = message["commands"]
             if commands:
-                cols = st.columns(min(len(commands), 4))
-                for i, cmd in enumerate(commands):
-                    col_index = i % len(cols)
-                    if cols[col_index].button(cmd, key=f"cmd_{cmd}_{i}"):
-                        # Execute command
-                        # Show a spinner while executing
-                        with st.spinner(f"Executing {cmd}..."):
-                            result = run_command(cmd)
+                st.markdown("### Suggested commands:")
 
-                        # Add the command and its result to the chat
-                        st.session_state.messages.append({"role": "user", "content": f"Executed command: {cmd}",
-                                                          "timestamp": datetime.now().isoformat()})
+                # Create a container with a distinct style for commands
+                with st.container():
+                    # Use columns to display multiple commands side by side
+                    cols = st.columns(1)
+                    for i, cmd in enumerate(commands):
+                        col_index = i % len(cols)
+                        with cols[col_index]:
+                            cmd_clean = clean_command(cmd)
+                            # Create a unique key using the message ID and command index
+                            unique_key = f"cmd_{message_id}_{i}"
+                            if st.button(f"🖥️ {cmd_clean}", key=unique_key, help="Click to execute command"):
+                                # Execute command
+                                with st.spinner(f"Executing: {cmd_clean}..."):
+                                    result = run_command(cmd_clean)
 
-                        # Add temporary result message
-                        temp_result_message = {"role": "assistant", "content": f"Command result:\n```\n{result}\n```",
-                                               "timestamp": datetime.now().isoformat(), "commands": []}
-                        st.session_state.messages.append(temp_result_message)
+                                # Format the result to escape HTML
+                                safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
 
-                        # Send the result to the API to maintain context and get LLM response
-                        if st.session_state.current_session_id:
-                            response = send_message(f"Command executed: {cmd}\nResult: {result}",
-                                                    st.session_state.current_session_id)
+                                # Add the command and its result to the chat
+                                st.session_state.messages.append(
+                                    {"role": "user", "content": f"Executed command: `{cmd_clean}`",
+                                        "timestamp": datetime.now().isoformat()})
 
-                            # If we got a valid response from the API, replace the temporary message
-                            if response and "message" in response:
-                                # Remove the temporary message
-                                st.session_state.messages.pop()
+                                st.session_state.messages.append({"role": "assistant",
+                                    "content": f"Executed command:\n```\n{safe_result}\n```",
+                                    "timestamp": datetime.now().isoformat()})
 
-                                # Add the actual response from the LLM
-                                assistant_message = {"role": "assistant", "content": response["message"],
-                                    "commands": response.get("commands", []), "timestamp": datetime.now().isoformat()}
-                                st.session_state.messages.append(assistant_message)
+                                # Send the result to the API to maintain context
+                                if st.session_state.current_session_id:
+                                    send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                        st.session_state.current_session_id)
 
-                        st.rerun()
+                                # Use standard rerun method in current Streamlit versions
+                                st.rerun()
+
+        # Also try to extract commands from code blocks if not already provided
+        elif isinstance(message, dict) and "commands" not in message:
+            # Extract commands from markdown code blocks in the message content
+            content = message.get('content', '')
+            code_blocks = re.findall(r'```(?:\w+)?\n(.*?)```', content, re.DOTALL)
+
+            if code_blocks:
+                commands = []
+                for block in code_blocks:
+                    # Split block into lines and add each non-empty line as a command
+                    lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
+                    commands.extend(lines)
+
+                if commands:
+                    st.markdown("### Comandes detectades:")
+
+                    with st.container():
+                        cols = st.columns(min(len(commands), 3))
+                        for i, cmd in enumerate(commands):
+                            col_index = i % len(cols)
+                            with cols[col_index]:
+                                cmd_clean = clean_command(cmd)
+                                # Create a unique key using the message ID and command index
+                                unique_key = f"detected_{message_id}_{i}"
+                                if st.button(f"🖥️ {cmd_clean}", key=unique_key,
+                                             help="Clica per executar aquesta comanda"):
+                                    with st.spinner(f"Executant: {cmd_clean}..."):
+                                        result = run_command(cmd_clean)
+
+                                    # Format the result to escape HTML
+                                    safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
+
+                                    st.session_state.messages.append(
+                                        {"role": "user", "content": f"Comanda executada: `{cmd_clean}`",
+                                            "timestamp": datetime.now().isoformat()})
+
+                                    st.session_state.messages.append({"role": "assistant",
+                                        "content": f"Resultat de la comanda:\n```\n{safe_result}\n```",
+                                        "timestamp": datetime.now().isoformat()})
+
+                                    if st.session_state.current_session_id:
+                                        send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                            st.session_state.current_session_id)
+
+                                    # Use standard rerun method in current Streamlit versions
+                                    st.rerun()
+
+        # Also try to extract commands from code blocks if not already provided
+        elif isinstance(message, dict) and "commands" not in message:
+            # Extract commands from markdown code blocks in the message content
+            content = message.get('content', '')
+            code_blocks = re.findall(r'```(?:\w+)?\n(.*?)```', content, re.DOTALL)
+
+            if code_blocks:
+                commands = []
+                for block in code_blocks:
+                    # Split block into lines and add each non-empty line as a command
+                    lines = [line.strip() for line in block.strip().splitlines() if line.strip()]
+                    commands.extend(lines)
+
+                if commands:
+                    st.markdown("### Comandes detectades:")
+
+                    with st.container():
+                        cols = st.columns(min(len(commands), 3))
+                        for i, cmd in enumerate(commands):
+                            col_index = i % len(cols)
+                            with cols[col_index]:
+                                cmd_clean = clean_command(cmd)
+                                # Create a unique key using the message ID and command index
+                                unique_key = f"detected_{message_id}_{i}"
+                                if st.button(f"🖥️ {cmd_clean}", key=unique_key,
+                                             help="Clica per executar aquesta comanda"):
+                                    with st.spinner(f"Executant: {cmd_clean}..."):
+                                        result = run_command(cmd_clean)
+
+                                    st.session_state.messages.append(
+                                        {"role": "user", "content": f"Comanda executada: `{cmd_clean}`",
+                                            "timestamp": datetime.now().isoformat()})
+
+                                    st.session_state.messages.append(
+                                        {"role": "assistant", "content": f"Resultat de la comanda:\n```\n{result}\n```",
+                                            "timestamp": datetime.now().isoformat()})
+
+                                    if st.session_state.current_session_id:
+                                        send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                            st.session_state.current_session_id)
+
+                                    st.rerun()
 
 
 def main():

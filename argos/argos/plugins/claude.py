@@ -91,22 +91,31 @@ class ClaudePlugin(LLMPlugin):
 
         messages = []
 
-        # Add system message if context is empty
-        if not context:
-            messages.append({"role": "assistant",
-                             "content": "I am a security configuration assistant. I'll help analyze and improve security configurations for various services and systems."})
-
         # Add conversation history if provided
         if context:
-            # Convert from OpenAI format to Anthropic format if needed
+            # Convert from standard format to Anthropic format if needed
             for msg in context:
                 role = msg["role"]
-                # Map 'user' and 'assistant' roles directly
-                # Map 'system' role to 'assistant' with a note that it's a system message
+                content = msg["content"]
+
+                # Map roles correctly for Anthropic's API
                 if role == "system":
-                    messages.append({"role": "assistant", "content": f"[System instruction: {msg['content']}]"})
-                else:
-                    messages.append({"role": role, "content": msg["content"]})
+                    messages.append({"role": "assistant", "content": f"<system>\n{content}\n</system>"})
+                elif role == "user":
+                    messages.append({"role": "user", "content": content})
+                elif role == "assistant":
+                    messages.append({"role": "assistant", "content": content})
+
+        # If no system message was included and this is the first message, add a default one
+        if not any(msg.get("role") == "assistant" and "<system>" in msg.get("content", "") for msg in messages):
+            default_system = """<system>
+        You are Argos, a security configuration assistant specialized in helping users with secure server and service configurations.
+        As a security configuration assistant, you'll help analyze and improve security configurations for various services and systems.
+        You should provide detailed technical information and suggest specific terminal commands when appropriate.
+        Always respond in the same language that the user is using.
+        When suggesting commands, format them in a way that they can be easily identified as executable commands.
+        </system>"""
+            messages.insert(0, {"role": "assistant", "content": default_system})
 
         # Add the current user message
         messages.append({"role": "user", "content": prompt})
@@ -117,7 +126,7 @@ class ClaudePlugin(LLMPlugin):
         try:
             # Make the API call with the selected model
             response = self.client.messages.create(model=selected_model, messages=messages, max_tokens=4096,
-                                                   temperature=0.7)
+                temperature=0.7)
 
             # Extract the response text
             return response.content[0].text

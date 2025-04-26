@@ -77,7 +77,7 @@ python -m eris
 ### Frontend
 ```bash
 cd frontend
-python -m frontend
+streamlit run app.py
 ```
 
 ## API Authentication
