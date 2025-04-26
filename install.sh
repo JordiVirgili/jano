@@ -169,7 +169,7 @@ start_frontend() {
     print_status "Starting the frontend..."
     source ./frontend_venv/bin/activate
     cd frontend
-    streamlit run app.py &
+    streamlit run app.py > dev/null &
     FRONTEND_PID=$!
     cd ..
     print_success "Frontend started with PID: $FRONTEND_PID"
