@@ -124,6 +124,11 @@ def send_message(message: str, session_id: str, force_advanced: bool = False):
             print(f"Unexpected API response format: {response}")
             return {"response": "Error: Unexpected response format from API"}
 
+        # Add response to display
+        assistant_message = {"role": "assistant", "content": response["message"], "commands": response["commands"],
+                             "timestamp": datetime.now().isoformat()}
+        st.session_state.messages.append(assistant_message)
+
         return response
     except Exception as e:
         print(f"Error in send_message: {str(e)}")
@@ -295,18 +300,13 @@ def display_message(message):
                                 # Format the result to escape HTML
                                 safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
 
-                                # Add the command and its result to the chat
                                 st.session_state.messages.append(
-                                    {"role": "user", "content": f"Executed command: `{cmd_clean}`",
-                                        "timestamp": datetime.now().isoformat()})
-
-                                st.session_state.messages.append({"role": "assistant",
-                                    "content": f"Executed command:\n```\n{safe_result}\n```",
-                                    "timestamp": datetime.now().isoformat()})
+                                    {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
+                                     "timestamp": datetime.now().isoformat()})
 
                                 # Send the result to the API to maintain context
                                 if st.session_state.current_session_id:
-                                    send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                    send_message(f"Command: {cmd_clean}\nResult:\n {result}",
                                         st.session_state.current_session_id)
 
                                 # Use standard rerun method in current Streamlit versions
@@ -326,10 +326,10 @@ def display_message(message):
                     commands.extend(lines)
 
                 if commands:
-                    st.markdown("### Comandes detectades:")
+                    st.markdown("### Detected commands:")
 
                     with st.container():
-                        cols = st.columns(min(len(commands), 3))
+                        cols = st.columns(1)
                         for i, cmd in enumerate(commands):
                             col_index = i % len(cols)
                             with cols[col_index]:
@@ -337,23 +337,19 @@ def display_message(message):
                                 # Create a unique key using the message ID and command index
                                 unique_key = f"detected_{message_id}_{i}"
                                 if st.button(f"🖥️ {cmd_clean}", key=unique_key,
-                                             help="Clica per executar aquesta comanda"):
-                                    with st.spinner(f"Executant: {cmd_clean}..."):
+                                             help="Click to execute command"):
+                                    with st.spinner(f"Executing: {cmd_clean}..."):
                                         result = run_command(cmd_clean)
 
                                     # Format the result to escape HTML
                                     safe_result = result.replace("<", "&lt;").replace(">", "&gt;")
 
                                     st.session_state.messages.append(
-                                        {"role": "user", "content": f"Comanda executada: `{cmd_clean}`",
-                                            "timestamp": datetime.now().isoformat()})
-
-                                    st.session_state.messages.append({"role": "assistant",
-                                        "content": f"Resultat de la comanda:\n```\n{safe_result}\n```",
-                                        "timestamp": datetime.now().isoformat()})
+                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
+                                         "timestamp": datetime.now().isoformat()})
 
                                     if st.session_state.current_session_id:
-                                        send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                        send_message(f"Command: {cmd_clean}\nResult: {result}",
                                             st.session_state.current_session_id)
 
                                     # Use standard rerun method in current Streamlit versions
@@ -373,10 +369,10 @@ def display_message(message):
                     commands.extend(lines)
 
                 if commands:
-                    st.markdown("### Comandes detectades:")
+                    st.markdown("### Detected commands:")
 
                     with st.container():
-                        cols = st.columns(min(len(commands), 3))
+                        cols = st.columns(1)
                         for i, cmd in enumerate(commands):
                             col_index = i % len(cols)
                             with cols[col_index]:
@@ -384,20 +380,16 @@ def display_message(message):
                                 # Create a unique key using the message ID and command index
                                 unique_key = f"detected_{message_id}_{i}"
                                 if st.button(f"🖥️ {cmd_clean}", key=unique_key,
-                                             help="Clica per executar aquesta comanda"):
-                                    with st.spinner(f"Executant: {cmd_clean}..."):
+                                             help="Click to execute command"):
+                                    with st.spinner(f"Executing: {cmd_clean}..."):
                                         result = run_command(cmd_clean)
 
                                     st.session_state.messages.append(
-                                        {"role": "user", "content": f"Comanda executada: `{cmd_clean}`",
-                                            "timestamp": datetime.now().isoformat()})
-
-                                    st.session_state.messages.append(
-                                        {"role": "assistant", "content": f"Resultat de la comanda:\n```\n{result}\n```",
+                                        {"role": "user", "content": f"Command: {cmd_clean}\nResult: {result}",
                                             "timestamp": datetime.now().isoformat()})
 
                                     if st.session_state.current_session_id:
-                                        send_message(f"Comanda executada: {cmd_clean}\nResultat: {result}",
+                                        send_message(f"Comand: {cmd_clean}\nResult: {result}",
                                             st.session_state.current_session_id)
 
                                     st.rerun()
@@ -459,13 +451,6 @@ def main():
             with st.spinner("Thinking..."):
                 response = send_message(user_input, st.session_state.current_session_id, use_advanced)
 
-            if response:
-                # Add response to display
-                assistant_message = {"role": "assistant",
-                                     "content": response["message"],
-                                     "commands": response["commands"],
-                                     "timestamp": datetime.now().isoformat()}
-                st.session_state.messages.append(assistant_message)
 
             # Rerun to update the UI with new messages
             st.rerun()
