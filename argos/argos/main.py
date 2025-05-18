@@ -3,7 +3,7 @@ from fastapi import FastAPI, Depends, APIRouter
 from starlette.middleware.cors import CORSMiddleware
 from starlette.responses import HTMLResponse
 
-from argos.api.v1 import tasks, chat, argos
+from argos.api.v1 import tasks, chat, argos, fix_api
 from argos.api.v1 import utils
 from argos.database import engine, Base
 from argos.database.repository import TaskRepository, ProcessRepository, ChatSessionRepository, ChatMessageRepository
@@ -59,3 +59,4 @@ app.include_router(utils.router, dependencies=[Depends(verify_credentials)])
 app.include_router(tasks.router, dependencies=[Depends(verify_credentials)])
 app.include_router(chat.router, dependencies=[Depends(verify_credentials)])
 app.include_router(argos.router, dependencies=[Depends(verify_credentials)])
+app.include_router(fix_api.router, dependencies=[Depends(verify_credentials)])
