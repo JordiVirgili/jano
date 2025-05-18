@@ -245,7 +245,7 @@ start_frontend() {
     print_status "Starting the frontend..."
     source ./frontend_venv/bin/activate
     cd frontend
-    streamlit run app.py &
+    streamlit run app.py --server.address=127.0.0.1 --server.port=8501 &
     FRONTEND_PID=$!
     cd ..
     print_success "Frontend started with PID: $FRONTEND_PID"
