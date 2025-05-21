@@ -87,49 +87,58 @@ class ChatService:
         match = re.match(fix_command_pattern, message.lower().strip())
 
         if match:
-            service_name = match.group(1)
-            file_path = match.group(2) if match.group(2) else None
-
-            # Check if we support this service
-            supported_services = fixer_service.get_supported_services()
-            service_supported = False
-
-            for plugin, services in supported_services.items():
-                if service_name.lower() in [s.lower() for s in services]:
-                    service_supported = True
-                    break
-
-            if service_supported:
-                # Analyze the configuration
-                analysis_result = fixer_service.analyze_configuration(service_name, file_path)
-
-                if analysis_result.get("success") and analysis_result.get("issues"):
-                    # Generate a response summarizing the issues
-                    response_text = f"I found {len(analysis_result['issues'])} security issues in the {service_name} configuration:\n\n"
-
-                    for i, issue in enumerate(analysis_result["issues"], 1):
-                        severity = issue.get("severity", "unknown").upper()
-                        response_text += f"{i}. [{severity}] {issue.get('description')}\n"
-                        if "current" in issue:
-                            response_text += f"   Current: {issue.get('current')}\n"
-                        response_text += f"   Recommended: {issue.get('fix')}\n\n"
-
-                    response_text += f"Would you like me to automatically fix these issues? Reply with 'yes' to apply all fixes, or specify which ones to apply (e.g., 'fix 1,3')."
-
-                    # Store the analysis result in the session for later use
-                    self.message_repo.add_message(db, chat_session.id, "system",
-                        f"ANALYSIS_RESULT:{service_name}:{str(analysis_result)}")
-
-                elif analysis_result.get("success") and not analysis_result.get("issues"):
-                    response_text = f"I analyzed the {service_name} configuration and found no security issues. The configuration appears to be secure!"
-                else:
-                    response_text = f"I encountered an error while analyzing the {service_name} configuration: {analysis_result.get('message', 'Unknown error')}"
-
-                # Save the response
+            if 'help command' in message.lower().strip():
+                plugins = fixer_service.get_supported_services()
+                all_services = [service for services in plugins.values() for service in services]
+                services_list = '\n\n'.join(all_services)
+                response_text = f"help() list of available fixers:\n\n{services_list}\n\n"
                 self.message_repo.add_message(db, chat_session.id, "assistant", response_text)
-
                 return {"response": response_text, "session_id": chat_session.session_id,
                         "model_used": "Configuration Analyzer"}
+            else:
+                service_name = match.group(1)
+                file_path = match.group(2) if match.group(2) else None
+
+                # Check if we support this service
+                supported_services = fixer_service.get_supported_services()
+                service_supported = False
+
+                for plugin, services in supported_services.items():
+                    if service_name.lower() in [s.lower() for s in services]:
+                        service_supported = True
+                        break
+
+                if service_supported:
+                    # Analyze the configuration
+                    analysis_result = fixer_service.analyze_configuration(service_name, file_path)
+
+                    if analysis_result.get("success") and analysis_result.get("issues"):
+                        # Generate a response summarizing the issues
+                        response_text = f"I found {len(analysis_result['issues'])} security issues in the {service_name} configuration:\n\n"
+
+                        for i, issue in enumerate(analysis_result["issues"], 1):
+                            severity = issue.get("severity", "unknown").upper()
+                            response_text += f"{i}. [{severity}] {issue.get('description')}\n"
+                            if "current" in issue:
+                                response_text += f"   Current: {issue.get('current')}\n"
+                            response_text += f"   Recommended: {issue.get('fix')}\n\n"
+
+                        response_text += f"Would you like me to automatically fix these issues? Reply with 'yes' to apply all fixes, or specify which ones to apply (e.g., 'fix 1,3')."
+
+                        # Store the analysis result in the session for later use
+                        self.message_repo.add_message(db, chat_session.id, "system",
+                            f"ANALYSIS_RESULT:{service_name}:{str(analysis_result)}")
+
+                    elif analysis_result.get("success") and not analysis_result.get("issues"):
+                        response_text = f"I analyzed the {service_name} configuration and found no security issues. The configuration appears to be secure!"
+                    else:
+                        response_text = f"I encountered an error while analyzing the {service_name} configuration: {analysis_result.get('message', 'Unknown error')}"
+
+                    # Save the response
+                    self.message_repo.add_message(db, chat_session.id, "assistant", response_text)
+
+                    return {"response": response_text, "session_id": chat_session.session_id,
+                            "model_used": "Configuration Analyzer"}
 
         # Check if the message is a confirmation to apply fixes
         if re.match(r"^(yes|y)$", message.lower().strip()):
